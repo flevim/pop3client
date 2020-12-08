@@ -7,7 +7,6 @@ import ssl
 import time
 import argparse
 from datetime import datetime
-from termcolor import colored, cprint
 
 ENCODING = 'utf-8'
 SSL_PORT = 995
@@ -21,6 +20,22 @@ TIMEOUT = 20
 #inicializar argparse
 parser = argparse.ArgumentParser()
 
+
+def ascii_art():
+    print("""
+
+  /$$$$$$  /$$       /$$$$$$ /$$$$$$$$ /$$   /$$ /$$$$$$$$ /$$$$$$$$       /$$$$$$$   /$$$$$$  /$$$$$$$   /$$$$$$ 
+ /$$__  $$| $$      |_  $$_/| $$_____/| $$$ | $$|__  $$__/| $$_____/      | $$__  $$ /$$__  $$| $$__  $$ /$$__  $$
+| $$  \__/| $$        | $$  | $$      | $$$$| $$   | $$   | $$            | $$  \ $$| $$  \ $$| $$  \ $$|__/  \ $$
+| $$      | $$        | $$  | $$$$$   | $$ $$ $$   | $$   | $$$$$         | $$$$$$$/| $$  | $$| $$$$$$$/   /$$$$$/
+| $$      | $$        | $$  | $$__/   | $$  $$$$   | $$   | $$__/         | $$____/ | $$  | $$| $$____/   |___  $$
+| $$    $$| $$        | $$  | $$      | $$\  $$$   | $$   | $$            | $$      | $$  | $$| $$       /$$  \ $$
+|  $$$$$$/| $$$$$$$$ /$$$$$$| $$$$$$$$| $$ \  $$   | $$   | $$$$$$$$      | $$      |  $$$$$$/| $$      |  $$$$$$/
+ \______/ |________/|______/|________/|__/  \__/   |__/   |________/      |__/       \______/ |__/       \______/ 
+                                                                                                                  
+                                                                                                                  
+                                                                                                                  
+""")
 
 class POP3Client: 
     def __init__(self, host, port=SSL_PORT, timeout=TIMEOUT):
@@ -42,11 +57,23 @@ class POP3Client:
         print(data)
 
 
+
     def login(self, user, passwd): 
-        self.sock.connect((self.host, self.port))
+        try:
+            self.sock.connect((self.host, self.port))
+        
+        except:
+            print("No ha sido posible la conexión con el servidor.\n\nSaliendo...")
+            sys.exit(0)
+
         self.greeting()
         usr = self.user(user)
-        pswd = self.password(passwd)    
+        pswd = self.password(passwd)
+
+        if pswd.startswith('-ERR'):
+            self.quit()
+
+
         
     
     def send_data_email(self, data, complete_msg = ''):
@@ -81,7 +108,7 @@ class POP3Client:
         user_str = 'USER {}{}'.format(user, CRLF)
         print(user_str)
         
-        self.send_data(user_str)
+        return self.send_data(user_str)
 
 
     
@@ -90,7 +117,7 @@ class POP3Client:
         print(pass_str)
         
 
-        self.send_data(pass_str)
+        return self.send_data(pass_str)
         
 
         
@@ -115,9 +142,8 @@ if __name__ == "__main__":
     parser.add_argument("--host", help="Your POP3 server here (pop3 gmail by default)")
     args = parser.parse_args()
 
-    text = colored('Hello, World!', 'red', attrs=['reverse'])
-    print(text)
-    cprint('Hello, World!', 'green', 'on_red')
+    ascii_art()
+
     client = POP3Client(args.host if args.host else GMAIL_HOST)
 
     client.login(args.user, args.passwd)
@@ -128,13 +154,15 @@ if __name__ == "__main__":
         if user_input and user_input.lower().split()[0] in ('retr', 'top'):
             print(client.send_data_email(user_input+CRLF))
         
+        
+        if user_input and user_input.lower() == 'quit':
+            client.quit()
+ 
         else:
             data = client.send_data(user_input+CRLF)
 
         
 
-        if user_input and user_input.lower() == 'quit':
-            client.quit()
- 
+        
 
 
