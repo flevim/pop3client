@@ -24,17 +24,18 @@ parser = argparse.ArgumentParser()
 def ascii_art():
     print("""
 
-  /$$$$$$  /$$       /$$$$$$ /$$$$$$$$ /$$   /$$ /$$$$$$$$ /$$$$$$$$       /$$$$$$$   /$$$$$$  /$$$$$$$   /$$$$$$ 
- /$$__  $$| $$      |_  $$_/| $$_____/| $$$ | $$|__  $$__/| $$_____/      | $$__  $$ /$$__  $$| $$__  $$ /$$__  $$
-| $$  \__/| $$        | $$  | $$      | $$$$| $$   | $$   | $$            | $$  \ $$| $$  \ $$| $$  \ $$|__/  \ $$
-| $$      | $$        | $$  | $$$$$   | $$ $$ $$   | $$   | $$$$$         | $$$$$$$/| $$  | $$| $$$$$$$/   /$$$$$/
-| $$      | $$        | $$  | $$__/   | $$  $$$$   | $$   | $$__/         | $$____/ | $$  | $$| $$____/   |___  $$
-| $$    $$| $$        | $$  | $$      | $$\  $$$   | $$   | $$            | $$      | $$  | $$| $$       /$$  \ $$
-|  $$$$$$/| $$$$$$$$ /$$$$$$| $$$$$$$$| $$ \  $$   | $$   | $$$$$$$$      | $$      |  $$$$$$/| $$      |  $$$$$$/
- \______/ |________/|______/|________/|__/  \__/   |__/   |________/      |__/       \______/ |__/       \______/ 
-                                                                                                                  
-                                                                                                                  
-                                                                                                                  
+
+ /$$$$$$$   /$$$$$$  /$$$$$$$   /$$$$$$         /$$$$$$  /$$       /$$$$$$ /$$$$$$$$ /$$   /$$ /$$$$$$$$
+| $$__  $$ /$$__  $$| $$__  $$ /$$__  $$       /$$__  $$| $$      |_  $$_/| $$_____/| $$$ | $$|__  $$__/
+| $$  \ $$| $$  \ $$| $$  \ $$|__/  \ $$      | $$  \__/| $$        | $$  | $$      | $$$$| $$   | $$   
+| $$$$$$$/| $$  | $$| $$$$$$$/   /$$$$$/      | $$      | $$        | $$  | $$$$$   | $$ $$ $$   | $$   
+| $$____/ | $$  | $$| $$____/   |___  $$      | $$      | $$        | $$  | $$__/   | $$  $$$$   | $$   
+| $$      | $$  | $$| $$       /$$  \ $$      | $$    $$| $$        | $$  | $$      | $$\  $$$   | $$   
+| $$      |  $$$$$$/| $$      |  $$$$$$/      |  $$$$$$/| $$$$$$$$ /$$$$$$| $$$$$$$$| $$ \  $$   | $$   
+|__/       \______/ |__/       \______/        \______/ |________/|______/|________/|__/  \__/   |__/   
+                                                                                                        
+                                                                                                        
+                                                                                                        
 """)
 
 class POP3Client: 
@@ -63,7 +64,7 @@ class POP3Client:
             self.sock.connect((self.host, self.port))
         
         except:
-            print("No ha sido posible la conexión con el servidor.\n\nSaliendo...")
+            print("[*] Connection to the server was not possible.\n\nBye.")
             sys.exit(0)
 
         self.greeting()
@@ -86,10 +87,12 @@ class POP3Client:
 
         while True:
             buff = self.sock.recv().decode(ENCODING)
+            print(buff)
             complete_msg += buff
-            if buff.startswith('-ERR') or '\n.\r' in complete_msg :
+            
+            if complete_msg.startswith('-ERR') or '\n.\r' in complete_msg:
                 break
-
+        
         return self.cut_retr(complete_msg)
         
     
@@ -122,6 +125,8 @@ class POP3Client:
 
         
     def quit(self):
+        """ Servidor debería cerrar socket y enviar mensaje 
+        pero x las dudas""" 
         print("Bye.")
         self.sock.shutdown(socket.SHUT_RDWR)
         sys.exit(0)
@@ -139,7 +144,7 @@ class POP3Client:
 if __name__ == "__main__":
     parser.add_argument("user", help="Your email account here")
     parser.add_argument("passwd", help="Your account password")
-    parser.add_argument("--host", help="Your POP3 server here (pop3 gmail by default)")
+    parser.add_argument("--host", help="Your POP3 server here (pop3 gmail by default on SSL port 995)")
     args = parser.parse_args()
 
     ascii_art()
@@ -149,20 +154,21 @@ if __name__ == "__main__":
     client.login(args.user, args.passwd)
     
     while 1:
-        user_input = str(input().strip()) 
+        user_input = str(input().strip())
         
         if user_input and user_input.lower().split()[0] in ('retr', 'top'):
-            print(client.send_data_email(user_input+CRLF))
+            client.send_data_email(user_input+CRLF)
         
         
-        if user_input and user_input.lower() == 'quit':
-            client.quit()
- 
         else:
             data = client.send_data(user_input+CRLF)
 
+
+        if user_input and user_input.lower() == 'quit':
+            client.quit()
+ 
         
 
-        
+         
 
 
