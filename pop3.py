@@ -36,6 +36,7 @@ class POP3Client:
         
         return ssl_sock 
     
+
     def greeting(self):
         data = self.sock.recv().decode(ENCODING)
         print(data)
@@ -45,20 +46,24 @@ class POP3Client:
         self.sock.connect((self.host, self.port))
         self.greeting()
         usr = self.user(user)
-        time.sleep(1)
         pswd = self.password(passwd)    
         
     
     def send_data_email(self, data, complete_msg = ''):
+
+        """ TCP segmenta los mensajes largos por lo que 
+        junto estos y retorno el correo completo 
+        (Esto ocurre con RETR y TOP) """ 
+
         self.sock.send(data.encode())
 
         while True:
             buff = self.sock.recv().decode(ENCODING)
             complete_msg += buff
-            if '\n.\r' in complete_msg:
+            if buff.startswith('-ERR') or '\n.\r' in complete_msg :
                 break
 
-        return complete_msg
+        return self.cut_retr(complete_msg)
         
     
     def send_data(self, data):
@@ -70,12 +75,11 @@ class POP3Client:
         
     
     def user(self, user):
-        """ Envia nombre de usuario ingresado en argumentos """
-        """ luego contraseña es verificada para abrir buzon """
+        """ Envia nombre de usuario ingresado en argumentos 
+        luego contraseña es verificada para abrir buzon """
 
         user_str = 'USER {}{}'.format(user, CRLF)
         print(user_str)
-        time.sleep(1)
         
         self.send_data(user_str)
 
@@ -84,7 +88,7 @@ class POP3Client:
     def password(self, passwd):
         pass_str = 'PASS {}{}'.format(passwd, CRLF)
         print(pass_str)
-        time.sleep(1)
+        
 
         self.send_data(pass_str)
         
@@ -97,7 +101,11 @@ class POP3Client:
     
         
     def cut_retr(self, data):
-        pass
+        """ Elimino data innecesario de ssl, firmas, google, etc """ 
+        ok_msg = data.split('\n')[0]
+        start = data.find('MIME-Version')
+
+        return ok_msg + CRLF + data[start:]                                             
 
 
     
@@ -115,9 +123,9 @@ if __name__ == "__main__":
     client.login(args.user, args.passwd)
     
     while 1:
-        user_input = str(input()) 
+        user_input = str(input().strip()) 
         
-        if user_input and user_input.lower().split()[0] in ('retr', 'top', 'uidl'):
+        if user_input and user_input.lower().split()[0] in ('retr', 'top'):
             print(client.send_data_email(user_input+CRLF))
         
         else:
@@ -127,9 +135,6 @@ if __name__ == "__main__":
 
         if user_input and user_input.lower() == 'quit':
             client.quit()
-
-
-    print("Estado transacción")
-    
+ 
 
 
