@@ -10,13 +10,14 @@ from datetime import datetime
 import re 
 
 ENCODING = 'utf-8'
+DEFAULT_PORT = 110
 SSL_PORT = 995
 GMAIL_HOST = 'pop.gmail.com'
 
 CR = '\r'
 LF = '\n'
 CRLF = CR+LF
-TIMEOUT = 20
+TIMEOUT = 5
 
 #inicializar argparse
 parser = argparse.ArgumentParser()
@@ -33,7 +34,7 @@ def help():
     print(" - ESTADO   ~>  Cantidad de correos y el tamaño en bytes de la bandeja.")
     print(" - BORRAR <numero-correo>   ~>  Elimina correo especificado.")
     print(" - MOSTRAR <numero-correo>   ~>  Recupera correo especificado.")
-    print(" - RECUP <numero-correo>  ~>  Trae correo eliminado a la bandeja nuevamente.")
+    print(" - RECUP ~>  Trae correo eliminado a la bandeja nuevamente.")
     print(" - HEAD <numero-correo> <num-lineas>   ~>   Muestra cabeceras del mensaje con el n° de lineas especificado.")
     print(" - IDENT [numero-correo]   ~>  Muestra identificadores para cada correo (Opcional el correo especifico).")
     print(" - NOOP   ~>   Servidor pop3 no hace nada, simplemente devuelve respuesta positiva.")
@@ -80,10 +81,44 @@ def valid_user(user):
     email_struct = '^[a-z0-9]+[\._]?[a-z0-9]+[@]\w+[.]\w{2,3}$'    
     
     return re.search(email_struct, user)
-        
+
+
+def validate_user():
+        user = str(input(" >> Ingrese su cuenta de correo: "))
+
+        while not(valid_user(user)):
+            print("Lo sentimos... esta cuenta de correo no es valida.\n")
+            user = str(input(" >> Ingrese una cuenta de correo valida: "))
+
+        return user
+    
+
+def validate_passwd():
+        passwd = str(input(" >> Ingrese su contraseña: "))
+    
+        while not(passwd):
+            print("No ha ingresado nada...")
+            passwd = str(input(" >> Porfavor ingrese una contraseña: "))
+    
+        return passwd
+
+
+def validate_ssl_options():
+        print("\nUsualmente los servidores de correo necesitan que se cifre la conexión para mayor seguridad...")
+        print("\n Desea una conexión cifrada? (Mayor posibilidad de una conexión exitosa)\n1. SI\n2. NO")
+        have_ssl = str(input(">> "))
+
+        while have_ssl not in ('1','2'):
+            print("Opción invalida")
+            print("\n Desea una conexión cifrada? (Mayor posibilidad de ingreso)\n1. SI\n2. NO")
+            have_ssl = str(input(">> "))
+
+        return have_ssl 
+
+
 
 class POP3Client: 
-    def __init__(self, host, port=SSL_PORT, timeout=TIMEOUT):
+    def __init__(self, host, port, timeout=TIMEOUT):
         self.host = host
         self.port = port
         self.sock = self.create_socket(timeout)
@@ -103,41 +138,74 @@ class POP3Client:
 
 
 
-    def login(self, user, passwd): 
+    def login(self, userr, pswd): 
         try:
+            print("\n [*] Intentando conectar a {} desde el puerto {}...\n".format(self.host, self.port))
+            time.sleep(1)
             self.sock.connect((self.host, self.port))
         
-        except:
-            print("[*] La conexión con el servidor no ha sido posible.\n\nAdios.")
+        except OSError:
+            print("[x] La conexión con el servidor no ha sido posible.\n")
+            print("[x] Posibles problemas: ")
+            print("     - Verifique si la cuenta de correo que ingresó está escrita correctamente.")
+            print("     - Verifique su conexión a internet.")
+            print("     - El servidor solo acepta conexiones cifradas.")
+            
+            print("\n Adios.")
             sys.exit(0)
-
+        
+       
         self.greeting()
         print("\n[*] Inicio de sesión\n")
-        usr = self.user(user)
-        time.sleep(1)
-        pswd = self.password(passwd)
-        time.sleep(1)
 
-        if pswd.startswith('-ERR'):
-            self.quit()
+        try:
+            usr = self.user(userr)
+            time.sleep(1)
+            pswd = self.password(pswd)
+            time.sleep(1)
 
+            if pswd.startswith('-ERR'):
+                print("\n-ERROR: Cuenta de correo y/o contraseña incorrecta.")
+                self.quit(usr)
+
+        except socket.timeout:
+            print("\n\nUps... Ha ocurrido un error al conectarse al servidor de correo.")
+            self.quit(usr) 
+
+        print("Bienvenido/a {}.\n".format(userr.split('@')[0]))
+        time.sleep(1)
 
         
     
-    def send_data_email(self, data, complete_msg = ''):
+    def send_data_email(self, data, complete_msg=''):
 
         """ TCP segmenta los mensajes largos por lo que 
         junto estos y retorno el correo completo 
-        (Esto ocurre con RETR y TOP) """ 
+        (Esto ocurre con RETR y TOP) """
+        
+        #complete_msg = self.send_data(data)
 
+        #if complete_msg[complete_msg.find(LF)+1:] == '':
+        #    is_incomplete = False
         self.sock.send(data.encode())
-
+        
+        buff = self.sock.recv().decode(ENCODING)
+        if buff[buff.find(LF)+1:] == '':
+            return buff
+        
         while True:
-            buff = self.sock.recv().decode(ENCODING)
-            complete_msg += buff
             
+            complete_msg += buff
+
             if complete_msg.startswith('-ERR') or '\n.\r' in complete_msg:
                 break
+        
+            try:
+                buff = self.sock.recv().decode(ENCODING)
+            
+            except UnicodeDecodeError: 
+                buff = self.sock.recv().decode('latin-1')
+            
         
         return complete_msg
         
@@ -161,23 +229,19 @@ class POP3Client:
         return _send
 
     
-    def password(self, passwd):
+    def password(self, pswrd):
         pass_str = '\nCONTRASEÑA: %s  ' % passwd
         print(pass_str, end=" ") 
-        
-        _send = self.send_data('PASS %s%s' % (passwd, CRLF))
 
-        status, reason = _send.split()[0], ' '.join(_send.split()[1:])
-        print("{}\n\n{}\n".format(status, reason)) 
+        _send = self.send_data('PASS %s%s' % (pswrd, CRLF))
+        print("{}\n".format(_send.split()[0])) 
         
         return _send
         
 
-        
-    def quit(self):
+    def quit(self, s):
         """ Servidor debería cerrar socket y enviar mensaje 
         pero x las dudas""" 
-
         self.send_data('QUIT%s' % CRLF)
         print("Adios.")
         self.sock.shutdown(socket.SHUT_RDWR)
@@ -188,8 +252,6 @@ class POP3Client:
         """ Elimino data innecesaria, 
         - ok_msg, from, mime-version, to, 
         date, subject, content-type, cuerpo correo """
-        print(data)
-        print("-" * 120)
 
         ok_msg = data.split('\n')[0]
         complete_mail += ok_msg
@@ -229,7 +291,7 @@ class POP3Client:
         
         cmd = "LIST {}".format(arg[1]) if len(arg) > 1 else "LIST"
         
-        resp = self.send_data(cmd+CRLF) 
+        resp = self.send_data_email(cmd+CRLF) 
         
         if resp.startswith('-ERR'): 
             print("-ERROR: Numero de correo invalido") 
@@ -281,46 +343,73 @@ class POP3Client:
         print(self.cut_retr(_send))
 
         
-    def rst(self, args):
-        print("reseting...")
-    def uidl(self, args):
-        print("uidl...")
+    def rst(self, s):
+        s = s.split()
+        
+        if len(s) > 1: 
+            print("USO: RECUP ~>  Trae correos marcados como eliminados a la bandeja nuevamente.")
+            return 
+        
+        resp = self.send_data_email('RSET %s' % (CRLF))
+        if resp.startswith('-ERR'):
+            print("-ERROR: No ha sido posible recuperar el correo.")
+            return 
+        
+        print(resp)
+        
 
-    def top(self, args):
-        print("top...")
+    def uidl(self, s):
+        s = s.split()
+        
+        if len(s) > 2:
+            print("USO: IDENT [numero-correo]   ~>  Muestra identificadores para cada correo (Opcional el correo especifico).")
+            return 
+        
+        cmd = 'UIDL {}'.format(s[1]) if len(s) > 1 else 'UIDL'
+        resp = self.send_data_email(cmd+CRLF)
 
+        if resp.startswith('-ERR'):
+            print("-ERROR: Número de correo invalido.")
+            return
+        
+        print(resp)   
+                
+
+    def top(self, s):
+        s = s.split()
+        if len(s) != 3: 
+            print("USO: HEAD <numero-correo> <num-lineas>   ~>   Muestra cabeceras del mensaje con el n° de lineas especificado.")
+            return
+        resp = self.send_data_email('TOP %s %s%s' % (s[1], s[2], CRLF))
+
+        if resp.startswith('-ERR'):
+            print("Número de correo invalido")
+            return 
+        
+        print(resp)
+
+        
     def noop(self, s):
         _send = self.send_data('NOOP%s' % CRLF)
         print(_send)
         
 
     
-    
-    
 if __name__ == "__main__":
-    # FALTA CONFIGURAR PUERTO POR DEFECTO 
-
-    #ARGUMENTOS 
-    parser.add_argument("usuario", help="Tu cuenta de correo aquí")
-    parser.add_argument("contrasenia", help="Tu contraseña aquí")
-    parser.add_argument("--ssl", help="Se indica puerto SSL 995 (Por defecto se tiene puerto 110)",
-    action = "store_true")
-
-    args = parser.parse_args()
-
+    
     #LOGO INICIO
     ascii_art()
    
+    user = validate_user()
+    passwd = validate_passwd()
+    have_ssl = validate_ssl_options()
 
-    #VALIDACIONES Y CREAR CLIENT POP3 
-    if not(valid_user(args.usuario)):
-        print("Cuenta de correo invalida\nAdios.")
-        sys.exit(0)
+    host_usuario = user.split('@')[1]
+    port = SSL_PORT if have_ssl == '1' else DEFAULT_PORT
     
-    host_usuario = args.usuario.split('@')[1]
-    client = POP3Client(choose_host(host_usuario[:host_usuario.find('.')]))
-    
-    client.login(args.usuario, args.contrasenia)
+    client = POP3Client(choose_host(host_usuario[:host_usuario.find('.')]), port)
+
+    client.login(user, passwd)
 
     #AYUDA
     help()
