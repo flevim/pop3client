@@ -23,21 +23,23 @@ parser = argparse.ArgumentParser()
 
 
 def help():
-    print("-" * 120)
-    print("\n [*] COMANDOS DISPONIBLES")
-    print("\n * Argumentos dentro de [] son OPCIONALES y dentro de <> NECESARIOS.")
-    print(" * Argumentos pueden ingresarse tanto en mayusculas como minusculas.\n")
-    print(" - listar [numero-correo]  ~>  Lista correos de la bandeja (Opcionalmente especificar el correo con el numero).")
-    print(" - estado   ~>  Cantidad de correos y el tamaño en bytes de la bandeja.")
-    print(" - borrar <numero-correo>   ~>  Elimina correo especificado.")
-    print(" - mostrar <numero-correo>   ~>  Recupera correo especificado.")
-    print(" - recuperar <numero-correo>  ~>  Trae correo eliminado a la bandeja nuevamente.")
-    print(" - cabecera <numero-correo> <num-lineas>   ~>   Muestra cabeceras del mensaje con el n° de lineas especificado.")
-    print(" - ident [numero-correo]   ~>  Muestra identificadores para cada correo (Opcional el correo especifico).")
-    print(" - noop   ~>   Servidor pop3 no hace nada, simplemente devuelve respuesta positiva.")
-    print(" - salir  ~>  Termina sesión del cliente POP3.")
     print()
-    print("-" * 120)
+    print("*" * 120)
+    print("\n AYUDA")
+    print("\n [+] Argumentos dentro de [] son OPCIONALES y dentro de <> NECESARIOS.")
+    print(" [+] Argumentos pueden ingresarse tanto en mayusculas como minusculas.\n")
+    print("\n [*] COMANDOS DISPONIBLES:")
+    print(" - LISTAR [numero-correo]  ~>  Lista correos de la bandeja (Opcionalmente especificar el correo con el numero).")
+    print(" - ESTADO   ~>  Cantidad de correos y el tamaño en bytes de la bandeja.")
+    print(" - BORRAR <numero-correo>   ~>  Elimina correo especificado.")
+    print(" - MOSTRAR <numero-correo>   ~>  Recupera correo especificado.")
+    print(" - RECUP <numero-correo>  ~>  Trae correo eliminado a la bandeja nuevamente.")
+    print(" - HEAD <numero-correo> <num-lineas>   ~>   Muestra cabeceras del mensaje con el n° de lineas especificado.")
+    print(" - IDENT [numero-correo]   ~>  Muestra identificadores para cada correo (Opcional el correo especifico).")
+    print(" - NOOP   ~>   Servidor pop3 no hace nada, simplemente devuelve respuesta positiva.")
+    print(" - SALIR  ~>  Termina sesión del cliente POP3.")
+    print()
+    print("*" * 120)
 
 def ascii_art():
     print("""
@@ -106,12 +108,15 @@ class POP3Client:
             self.sock.connect((self.host, self.port))
         
         except:
-            print("[*] Connection to the server was not possible.\n\nBye.")
+            print("[*] La conexión con el servidor no ha sido posible.\n\nAdios.")
             sys.exit(0)
 
         self.greeting()
+        print("\n[*] Inicio de sesión\n")
         usr = self.user(user)
+        time.sleep(1)
         pswd = self.password(passwd)
+        time.sleep(1)
 
         if pswd.startswith('-ERR'):
             self.quit()
@@ -129,20 +134,17 @@ class POP3Client:
 
         while True:
             buff = self.sock.recv().decode(ENCODING)
-            print(buff)
             complete_msg += buff
             
             if complete_msg.startswith('-ERR') or '\n.\r' in complete_msg:
                 break
         
-        return self.cut_retr(complete_msg)
+        return complete_msg
         
     
     def send_data(self, data):
         self.sock.send(data.encode())
         buff = self.sock.recv().decode(ENCODING) 
-        
-        print(buff)
         return buff
         
     
@@ -150,57 +152,135 @@ class POP3Client:
         """ Envia nombre de usuario ingresado en argumentos 
         luego contraseña es verificada para abrir buzon """
 
-        user_str = 'USUARIO: %s' % user
-        print(user_str)
-        
-        return self.send_data('USER %s%s' % (user, CRLF))
+        user_str = 'USUARIO: %s  ' % user
+        print(user_str, end=" ")
 
+        _send = self.send_data('USER %s%s' % (user, CRLF))
+        print(_send[:3]) 
+        
+        return _send
 
     
     def password(self, passwd):
-        pass_str = 'CONTRASEÑA: %s' % passwd
-        print(pass_str)
-        return self.send_data('PASS %s%s' % (passwd, CRLF))
+        pass_str = '\nCONTRASEÑA: %s  ' % passwd
+        print(pass_str, end=" ") 
+        
+        _send = self.send_data('PASS %s%s' % (passwd, CRLF))
+
+        status, reason = _send.split()[0], ' '.join(_send.split()[1:])
+        print("{}\n\n{}\n".format(status, reason)) 
+        
+        return _send
         
 
         
     def quit(self):
         """ Servidor debería cerrar socket y enviar mensaje 
         pero x las dudas""" 
-        self.send_data()
-        print("Bye.")
+
+        self.send_data('QUIT%s' % CRLF)
+        print("Adios.")
         self.sock.shutdown(socket.SHUT_RDWR)
         sys.exit(0)
     
         
-    def cut_retr(self, data):
-        """ Elimino data innecesario de ssl, firmas, google, etc """ 
+    def cut_retr(self, data, complete_mail=''):
+        """ Elimino data innecesaria, 
+        - ok_msg, from, mime-version, to, 
+        date, subject, content-type, cuerpo correo """
+        print(data)
+        print("-" * 120)
+
         ok_msg = data.split('\n')[0]
-        start = data.find('MIME-Version')
+        complete_mail += ok_msg
 
-        return ok_msg + CRLF + data[start:]      
+        start_from = data.find('\nFrom:')
+        end_from = data.find('\n', start_from+1)
+        complete_mail += data[start_from:end_from]
+
+        start_to = data.find('\nTo:')
+        end_to = data.find('\n', start_to+1)
+        complete_mail += data[start_to:end_to]
+
+        start_date = data.find("\nDate:")
+        end_date = data.find("\n", start_date+1)
+        complete_mail += data[start_date:end_date]
+
+        start_subject = data.find("\nSubject:")
+        end_subject = data.find("\n", start_subject+1)
+        complete_mail += data[start_subject:end_subject]
+        complete_mail += '\n'
+
+        start_mail = data.find('"UTF-8"')
+        start_mail = data.find('\n', start_mail+6)
     
-
-    def sanitize_input(self,s):
-        return s.split()
-
-    def list_emails(self, args):
-        if len(args) > 2:
-            print("Son necesarios 1 o ningun argumento para este comando.")
+        end_mail = data.find('--00', start_mail+1)
+        complete_mail += data[start_mail:end_mail]
+        
+        return complete_mail          
+    
+    
+    def list_emails(self, s):
+        arg = s.split()
+    
+        if len(arg) > 2:
+            print("Uso: LISTAR [numero-correo] (Número de correo es opcional)")
             return 
         
-        if args > 1 and not(args[1].isnumeric()):
-            print("Argumento debe indicar numero de correo")
+        cmd = "LIST {}".format(arg[1]) if len(arg) > 1 else "LIST"
         
-        email_num = args[1]
-        return self.send_data("LIST %s")
+        resp = self.send_data(cmd+CRLF) 
         
-    def stat(self, args ):
-        print("status...")
-    
-    def dele(self, args):
-        print("deleting...")
+        if resp.startswith('-ERR'): 
+            print("-ERROR: Numero de correo invalido") 
+            return
 
+        print(resp)
+        
+
+    def stat(self, s):
+        s = s.split()
+        _send = self.send_data('STAT%s' % CRLF)
+        
+        ok_msg, num_messages, size_mailbox = _send.split()
+        
+        print("\n"+ok_msg)
+        print("Numero de correos en el buzón: %s" % num_messages)
+        print("Tamaño del buzon de correo: %s bytes" % size_mailbox)
+    
+
+    def dele(self, s):
+        s = s.split()
+
+        if len(s) != 2: 
+            print(" Uso: BORRAR <numero-correo>   ~>  Elimina correo especificado.")        
+            return 
+        
+        _send = self.send_data('DELE %s%s' % (s[1], CRLF))
+
+        if _send.startswith('-ERR'):
+            print("Número de correo invalido.")
+            return
+
+        print("+OK Correo borrado del buzón (Puede recuperar correo con comando RECUP).")
+
+    
+    def retr(self, s):
+        s = s.split()
+
+        if len(s) != 2:
+            print(" Uso: MOSTRAR <numero-correo>   ~>  Recupera correo especificado.")        
+            return 
+        
+        _send = self.send_data_email('RETR %s%s' % (s[1], CRLF))
+        
+        if _send.startswith('-ERR'): 
+            print("-ERROR: Número de correo invalido.")
+            return 
+        
+        print(self.cut_retr(_send))
+
+        
     def rst(self, args):
         print("reseting...")
     def uidl(self, args):
@@ -209,12 +289,12 @@ class POP3Client:
     def top(self, args):
         print("top...")
 
-    def noop(self, args):
-        print("noop...")
+    def noop(self, s):
+        _send = self.send_data('NOOP%s' % CRLF)
+        print(_send)
+        
 
-    def retr(self, args):
-        print("retr...")
-
+    
     
     
 if __name__ == "__main__":
@@ -239,6 +319,7 @@ if __name__ == "__main__":
     
     host_usuario = args.usuario.split('@')[1]
     client = POP3Client(choose_host(host_usuario[:host_usuario.find('.')]))
+    
     client.login(args.usuario, args.contrasenia)
 
     #AYUDA
@@ -249,8 +330,8 @@ if __name__ == "__main__":
     commands = {
         "borrar": client.dele,
         "mostrar": client.retr,
-        "cabecera": client.top,
-        "recuperar": client.rst,
+        "head": client.top,
+        "recup": client.rst,
         "listar": client.list_emails,
         "estado": client.stat,
         "ident": client.uidl,
@@ -267,7 +348,7 @@ if __name__ == "__main__":
             help()
 
         elif user_input and user_input.split()[0] in commands:
-            commands[user_input.split()[0]](client.sanitize_input(user_input))
+            commands[user_input.split()[0]](user_input)
 
         
         else: 
